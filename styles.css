@@ -18,6 +18,10 @@
   /* curvature intensity */
   --curlShade: .55;
   --edgeShade: .35;
+
+  /* safe areas */
+  --safeB: env(safe-area-inset-bottom, 0px);
+  --safeT: env(safe-area-inset-top, 0px);
 }
 
 *{box-sizing:border-box}
@@ -40,8 +44,6 @@ a:hover{text-decoration:underline;}
   padding:16px;
   margin:14px 0;
 }
-.toc a{display:block;padding:10px 12px;border-radius:10px;}
-.toc a:hover{background:#151826;}
 
 .meta{font-size:13px;color:var(--muted);margin-top:6px}
 .tip{margin-top:10px}
@@ -55,7 +57,6 @@ a:hover{text-decoration:underline;}
   align-items:center;
   gap:10px;
 }
-.ttsCluster{display:flex; gap:10px; align-items:center;}
 
 .btn{
   display:inline-flex; align-items:center; justify-content:center;
@@ -82,20 +83,6 @@ a:hover{text-decoration:underline;}
   white-space:nowrap;
 }
 
-/* ✅ TTS Speed UI */
-.speedBox{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding:8px 10px;
-  border:1px solid var(--line);
-  border-radius:999px;
-  background:#0f1119;
-}
-.speedLabel{font-size:12px; color:var(--muted);}
-.speedValue{font-size:12px; color:var(--muted); min-width:54px; text-align:right;}
-.speedBox input[type="range"]{width:140px;}
-
 .scrollContent{
   margin-top:14px;
   line-height:var(--readerLine);
@@ -105,6 +92,63 @@ a:hover{text-decoration:underline;}
 }
 
 footer{margin-top:30px;color:var(--muted);font-size:13px}
+
+/* =========================
+   TOC with vertical covers
+   ========================= */
+.tocHead{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:10px;
+  margin-bottom:12px;
+}
+.tocTitle{font-weight:800;}
+.tocSub{font-size:12px;color:var(--muted);}
+
+.tocGrid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap:12px;
+}
+.tocCard{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:10px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:#0f1119;
+  text-decoration:none;
+  overflow:hidden;
+}
+.tocCard:hover{
+  background:#151826;
+  text-decoration:none;
+}
+.tocThumb{
+  width:100%;
+  aspect-ratio: 3 / 4;
+  border-radius:12px;
+  background-size:cover;
+  background-position:center;
+  border:1px solid rgba(255,255,255,.08);
+  overflow:hidden;
+  position:relative;
+}
+.tocThumbFallback{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; color:var(--muted);
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0));
+}
+.tocInfo{display:flex; flex-direction:column; gap:4px;}
+.tocEpTitle{
+  font-weight:700;
+  line-height:1.25;
+  color:var(--text);
+}
+.tocMeta{font-size:12px;color:var(--muted);}
 
 /* -------- Single-page Book -------- */
 .bookWrap{ margin-top:14px; display:none; }
@@ -256,8 +300,8 @@ footer{margin-top:30px;color:var(--muted);font-size:13px}
 }
 .flipLayer.active .stageShadow{ opacity:1; }
 
-.flipNext .sheet{ animation: flipNext var(--flipDur) cubic-bezier(.15,.85,.12,1) forwards; }
-.flipPrev .sheet{ animation: flipPrev var(--flipDur) cubic-bezier(.15,.85,.12,1) forwards; }
+.flipNext .sheet{ animation: flipNext var(--flipDur) var(--flipEase) forwards; }
+.flipPrev .sheet{ animation: flipPrev var(--flipDur) var(--flipEase) forwards; }
 
 @keyframes flipNext{
   0%   { transform: rotateY(0deg); }
@@ -284,42 +328,26 @@ footer{margin-top:30px;color:var(--muted);font-size:13px}
 .measureBox{ position:absolute; left:-99999px; top:-99999px; width:320px; pointer-events:none; opacity:0; }
 .measureText{ font-size:var(--readerFont); line-height:var(--readerLine); white-space:pre-wrap; }
 
-/* ------- Mobile auto UI ------- */
+/* ------- Mobile reading optimization ------- */
 .mobileBar{
   position:fixed;
-  left:12px; right:12px; bottom:12px;
+  left:12px; right:12px;
+  bottom: calc(10px + var(--safeB));
   display:none;
-  gap:10px;
+  gap:8px;
   z-index:999;
+  backdrop-filter: blur(10px);
 }
 .mobileBar .btn{
   flex:1;
-  padding:14px 12px;
-  border-radius:16px;
+  padding:12px 10px;
+  border-radius:14px;
   justify-content:center;
-}
-@media (max-width:720px){
-  .wrap{padding-bottom:160px;}
-  .toolbar{display:none;}
-  .bookNav{display:none;}
-  .mobileBar{display:flex;}
-  .bookStage{height:min(66vh, 560px);}
-  h1{font-size:24px}
-  :root{ --pagePadX: 16px; --pagePadY: 16px; }
-  .dogEar{ width:92px; height:92px; }
-}
-/* =========================
-   Mobile Reading Optimization
-   ========================= */
-
-:root{
-  --safeB: env(safe-area-inset-bottom, 0px);
-  --safeT: env(safe-area-inset-top, 0px);
+  font-size:14px;
 }
 
 /* ✅ 집중 모드: 컨트롤 숨김 */
 .readingFocus .readerTopRow,
-.readingFocus .ttsSpeedRow,
 .readingFocus .toolbar,
 .readingFocus .episodeNav,
 .readingFocus .bookNav,
@@ -329,15 +357,11 @@ footer{margin-top:30px;color:var(--muted);font-size:13px}
   transform: translateY(-6px);
   transition: opacity 200ms ease, transform 200ms ease;
 }
-
-/* 책 스테이지 위/아래 레이블은 남겨도 되는데, 더 몰입 원하면 숨김 */
 .readingFocus .bookTop,
 .readingFocus .bookBottom{
   opacity:0;
   transition: opacity 200ms ease;
 }
-
-/* 모바일 하단바도 집중 모드에선 숨김 */
 .readingFocus .mobileBar{
   opacity:0;
   pointer-events:none;
@@ -345,9 +369,8 @@ footer{margin-top:30px;color:var(--muted);font-size:13px}
   transition: opacity 220ms ease, transform 220ms ease;
 }
 
-/* 숨김 해제 기본 트랜지션(자연스러운 복귀) */
+/* 기본 복귀 트랜지션 */
 .readerTopRow,
-.ttsSpeedRow,
 .toolbar,
 .episodeNav,
 .bookNav,
@@ -358,59 +381,45 @@ footer{margin-top:30px;color:var(--muted);font-size:13px}
   transition: opacity 200ms ease, transform 200ms ease;
 }
 
-/* ✅ 모바일 전용 레이아웃 */
 @media (max-width:720px){
   .wrap{padding:18px 12px 24px;}
 
-  /* 헤더(작품명/설명)도 읽기 시작하면 방해되면 줄이기 */
   header{margin:6px 0 12px;}
   h1{font-size:20px;}
   p{font-size:14px; line-height:1.6;}
+
+  .tocGrid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap:10px;
+  }
 
   /* 데스크톱 툴바/네비 숨김 */
   .toolbar{display:none;}
   .bookNav{display:none;}
   .episodeNav{display:none;}
 
-  /* 모바일은 하단바를 “얇고 덜 방해되게” */
-  .mobileBar{
-    position:fixed;
-    left:10px; right:10px;
-    bottom: calc(10px + var(--safeB));
-    display:flex;
-    gap:8px;
-    z-index:999;
-    backdrop-filter: blur(10px);
-  }
-  .mobileBar .btn{
-    padding:12px 10px;
-    border-radius:14px;
-    font-size:14px;
-  }
+  .mobileBar{display:flex;}
 
-  /* ✅ 스크롤 모드: 가독성 최적화 */
+  /* ✅ 스크롤 모드: 하단바에 가리지 않게 */
   .scrollContent{
     font-size: 16px;
     line-height: 1.9;
-    padding-bottom: calc(70px + var(--safeB)); /* 하단바에 가리지 않게 */
+    padding-bottom: calc(70px + var(--safeB));
   }
 
-  /* ✅ 책 모드: 화면 꽉 채우고 잘림 최소화 (dvh 사용) */
+  /* ✅ 책 모드: dvh로 높이 안정화 + 본문영역 확장 */
   .bookWrap{margin-top:12px;}
-
   .bookStage{
-    /* 주소창 변화에도 안정적인 dvh */
     height: calc(100dvh - 120px - var(--safeB));
     border-radius:16px;
   }
 
-  /* 책 상/하단 레이블 공간 줄여서 본문 영역 확보 */
   .bookTop{ top:10px; left:12px; right:12px; }
   .bookBottom{ bottom:10px; left:12px; right:12px; }
 
   .pageShell{
     left:12px; right:12px;
-    top:34px; bottom:34px;  /* 본문 영역 넓힘 */
+    top:34px; bottom:34px;
     border-radius:14px;
   }
 
@@ -419,18 +428,13 @@ footer{margin-top:30px;color:var(--muted);font-size:13px}
     --pagePadY: 14px;
   }
 
-  /* ✅ “잘림” 완전 방지용 안전장치:
-     페이지 안에서 1~2줄이라도 초과하면 내부 스크롤로라도 볼 수 있게 */
+  /* ✅ 잘림 방지: 내부 스크롤 허용 */
   .pageInner{ overflow:auto; }
   .pageText{
-    height:auto;        /* 100% 고정이 잘림을 유발할 수 있음 */
+    height:auto;
     min-height:100%;
     -webkit-overflow-scrolling: touch;
   }
 
-  /* 너무 큰 dog-ear는 방해되니 약간만 */
   .dogEar{ width:76px; height:76px; opacity:.35; }
-
-  /* TTS 슬라이더는 모바일에서 숨김(하단바 mSpeed 사용) */
-  .ttsSpeedRow{display:none;}
 }
