@@ -730,3 +730,72 @@ function init() {
     showFatal(err && err.message ? err.message : String(err), err);
   }
 }
+
+// ============================================================
+// Mobile Focus Mode (Controls auto-hide) + Book reflow fix
+// ============================================================
+
+let focusTimer = null;
+function setFocusMode(on){
+  document.body.classList.toggle("readingFocus", on);
+}
+
+function armAutoHide(){
+  // 모바일에서만 자동숨김
+  if (!isMobile()) return;
+  clearTimeout(focusTimer);
+  setFocusMode(false); // 터치하면 다시 보이게
+  focusTimer = setTimeout(()=> setFocusMode(true), 2200);
+}
+
+// 탭/스크롤/버튼 누르면 잠깐 보이고 다시 숨김
+["click","touchstart","scroll","keydown"].forEach(evt=>{
+  window.addEventListener(evt, armAutoHide, { passive:true });
+});
+
+// 리더 영역 자체를 탭하면 토글도 가능(한 번은 보여주고, 다시 탭하면 숨김)
+reader.addEventListener("click", (e)=>{
+  if (!isMobile()) return;
+  // 버튼 클릭은 그냥 동작시키고, 빈 곳 탭만 토글
+  const isBtn = e.target.closest(".btn");
+  if (isBtn) return;
+  const now = document.body.classList.contains("readingFocus");
+  setFocusMode(!now);
+  if (!now) {
+    clearTimeout(focusTimer);
+    focusTimer = setTimeout(()=> setFocusMode(true), 2200);
+  }
+});
+
+// ------------------------------------------------------------
+// Book reflow fix: 모바일 주소창/폰트 로딩 등으로 높이 흔들릴 때 재측정
+// ------------------------------------------------------------
+function reflowBook(){
+  if (mode !== "book") return;
+  if (currentEpisodeIndex < 0) return;
+
+  // 두 번 rAF로 레이아웃 안정화 후 측정
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      const keep = pageIndex;
+      buildPages();
+      renderPage(clamp(keep, 0, Math.max(0, pages.length - 1)));
+    });
+  });
+}
+
+// 폰트 로딩 완료 시점에도 재측정
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(()=> reflowBook()).catch(()=>{});
+}
+
+// 모바일에서 화면 높이 변화(주소창) 반응
+window.addEventListener("orientationchange", ()=> setTimeout(reflowBook, 220));
+
+// 책 모드 전환 직후에도 한 번 더 재측정(잘림 방지)
+const _setMode = setMode;
+setMode = function(nextMode){
+  _setMode(nextMode);
+  if (nextMode === "book") reflowBook();
+  armAutoHide();
+};

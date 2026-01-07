@@ -308,3 +308,129 @@ footer{margin-top:30px;color:var(--muted);font-size:13px}
   :root{ --pagePadX: 16px; --pagePadY: 16px; }
   .dogEar{ width:92px; height:92px; }
 }
+/* =========================
+   Mobile Reading Optimization
+   ========================= */
+
+:root{
+  --safeB: env(safe-area-inset-bottom, 0px);
+  --safeT: env(safe-area-inset-top, 0px);
+}
+
+/* ✅ 집중 모드: 컨트롤 숨김 */
+.readingFocus .readerTopRow,
+.readingFocus .ttsSpeedRow,
+.readingFocus .toolbar,
+.readingFocus .episodeNav,
+.readingFocus .bookNav,
+.readingFocus .meta.tip{
+  opacity:0;
+  pointer-events:none;
+  transform: translateY(-6px);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+/* 책 스테이지 위/아래 레이블은 남겨도 되는데, 더 몰입 원하면 숨김 */
+.readingFocus .bookTop,
+.readingFocus .bookBottom{
+  opacity:0;
+  transition: opacity 200ms ease;
+}
+
+/* 모바일 하단바도 집중 모드에선 숨김 */
+.readingFocus .mobileBar{
+  opacity:0;
+  pointer-events:none;
+  transform: translateY(10px);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+/* 숨김 해제 기본 트랜지션(자연스러운 복귀) */
+.readerTopRow,
+.ttsSpeedRow,
+.toolbar,
+.episodeNav,
+.bookNav,
+.meta.tip,
+.bookTop,
+.bookBottom,
+.mobileBar{
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+/* ✅ 모바일 전용 레이아웃 */
+@media (max-width:720px){
+  .wrap{padding:18px 12px 24px;}
+
+  /* 헤더(작품명/설명)도 읽기 시작하면 방해되면 줄이기 */
+  header{margin:6px 0 12px;}
+  h1{font-size:20px;}
+  p{font-size:14px; line-height:1.6;}
+
+  /* 데스크톱 툴바/네비 숨김 */
+  .toolbar{display:none;}
+  .bookNav{display:none;}
+  .episodeNav{display:none;}
+
+  /* 모바일은 하단바를 “얇고 덜 방해되게” */
+  .mobileBar{
+    position:fixed;
+    left:10px; right:10px;
+    bottom: calc(10px + var(--safeB));
+    display:flex;
+    gap:8px;
+    z-index:999;
+    backdrop-filter: blur(10px);
+  }
+  .mobileBar .btn{
+    padding:12px 10px;
+    border-radius:14px;
+    font-size:14px;
+  }
+
+  /* ✅ 스크롤 모드: 가독성 최적화 */
+  .scrollContent{
+    font-size: 16px;
+    line-height: 1.9;
+    padding-bottom: calc(70px + var(--safeB)); /* 하단바에 가리지 않게 */
+  }
+
+  /* ✅ 책 모드: 화면 꽉 채우고 잘림 최소화 (dvh 사용) */
+  .bookWrap{margin-top:12px;}
+
+  .bookStage{
+    /* 주소창 변화에도 안정적인 dvh */
+    height: calc(100dvh - 120px - var(--safeB));
+    border-radius:16px;
+  }
+
+  /* 책 상/하단 레이블 공간 줄여서 본문 영역 확보 */
+  .bookTop{ top:10px; left:12px; right:12px; }
+  .bookBottom{ bottom:10px; left:12px; right:12px; }
+
+  .pageShell{
+    left:12px; right:12px;
+    top:34px; bottom:34px;  /* 본문 영역 넓힘 */
+    border-radius:14px;
+  }
+
+  :root{
+    --pagePadX: 14px;
+    --pagePadY: 14px;
+  }
+
+  /* ✅ “잘림” 완전 방지용 안전장치:
+     페이지 안에서 1~2줄이라도 초과하면 내부 스크롤로라도 볼 수 있게 */
+  .pageInner{ overflow:auto; }
+  .pageText{
+    height:auto;        /* 100% 고정이 잘림을 유발할 수 있음 */
+    min-height:100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 너무 큰 dog-ear는 방해되니 약간만 */
+  .dogEar{ width:76px; height:76px; opacity:.35; }
+
+  /* TTS 슬라이더는 모바일에서 숨김(하단바 mSpeed 사용) */
+  .ttsSpeedRow{display:none;}
+}
