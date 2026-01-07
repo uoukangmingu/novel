@@ -1,14 +1,6 @@
-﻿/* ============================================================
-   app.js — 안정형 (목차/본문 미노출 문제 해결 버전)
-   - DOM 준비 후 init()
-   - 필수 요소 누락/JS 에러를 화면에 표시
-   - optional chaining(?.) 제거 → 구형/웹뷰 호환성 향상
-   - lookbehind 정규식 제거 유지
-   ============================================================ */
-
-// ------------------------------
-// Novel Data
-// ------------------------------
+﻿// ------------------------------------------------------------
+// Novel Data (여기만 수정하면 됨)
+// ------------------------------------------------------------
 const NOVEL = {
   title: "원래 고양이는 로드킬을 당하지 않는다.",
   desc: "목차에서 회차를 선택하면 바로 읽을 수 있어요.",
@@ -28,40 +20,98 @@ const NOVEL = {
   ]
 };
 
-// ------------------------------
-// Helpers
-// ------------------------------
-function $(q) { return document.querySelector(q); }
+// ------------------------------------------------------------
+// DOM helpers
+// ------------------------------------------------------------
+const $ = (q) => document.querySelector(q);
 
-function showFatal(msg, err) {
-  console.error("[FATAL]", msg, err || "");
-  const box = document.createElement("div");
-  box.style.cssText = [
-    "position:fixed;left:12px;right:12px;top:12px;z-index:9999;",
-    "padding:12px 14px;border-radius:12px;",
-    "background:#2a0f14;border:1px solid #5a1a24;color:#ffd6dc;",
-    "font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;"
-  ].join("");
-  box.innerHTML = `<b>스크립트 오류:</b> ${escapeHtml(msg)}<br><span style="opacity:.85">콘솔(Console)에서 에러를 확인하세요.</span>`;
-  document.body.appendChild(box);
+$("#year").textContent = new Date().getFullYear();
+$("#siteTitle").textContent = NOVEL.title;
+$("#siteDesc").textContent = NOVEL.desc;
+
+const toc = $("#tocView");
+const reader = $("#readerView");
+const back = $("#backToToc");
+const epTitle = $("#epTitle");
+const epMeta = $("#epMeta");
+const epContent = $("#epContent");
+
+const prevBtn = $("#prevBtn");
+const nextBtn = $("#nextBtn");
+
+const modeScrollBtn = $("#modeScrollBtn");
+const modeBookBtn = $("#modeBookBtn");
+const modeHint = $("#modeHint");
+const progressHint = $("#progressHint");
+
+const bookWrap = $("#bookWrap");
+const bookStage = $("#bookStage");
+const bookEpLabel = $("#bookEpLabel");
+const spreadIndicator = $("#spreadIndicator");
+
+const pageText = $("#pageText");
+const pagePrevBtn = $("#pagePrevBtn");
+const pageNextBtn = $("#pageNextBtn");
+
+const pageNumberLabel = $("#pageNumberLabel");
+const percentLabel = $("#percentLabel");
+const progressBarFill = $("#progressBarFill");
+
+const flipLayer = $("#flipLayer");
+const sheet = $("#sheet");
+const sheetFrontText = $("#sheetFrontText");
+const sheetBackText = $("#sheetBackText");
+
+const measureBox = $("#measureBox");
+const measureText = $("#measureText");
+
+// Mobile bar
+const mobileMQ = window.matchMedia("(max-width:720px)");
+const mPrev = $("#mPrev");
+const mNext = $("#mNext");
+const mMode = $("#mMode");
+
+// ------------------------------------------------------------
+// State
+// ------------------------------------------------------------
+let currentEpisodeIndex = -1;
+let mode = localStorage.getItem("readerMode") || "scroll"; // scroll | book
+let pages = [];
+let pageIndex = 0;
+let animLock = false;
+
+// ------------------------------------------------------------
+// LocalStorage (per-episode last page)
+// ------------------------------------------------------------
+const LS_KEY = "novel_reader_last_page_v1";
+function loadLastPage(epId) {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return 0;
+    const obj = JSON.parse(raw);
+    const v = obj?.[epId];
+    return Number.isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+function saveLastPage(epId, idx) {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    obj[epId] = idx;
+    localStorage.setItem(LS_KEY, JSON.stringify(obj));
+  } catch {}
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (m) => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
-  }[m]));
-}
-
-function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
-
-// ------------------------------
-// Sentence split (lookbehind 제거)
-// ------------------------------
+// ------------------------------------------------------------
+// Sentence-based tokenization + natural line breaks
+// ------------------------------------------------------------
 function splitSentences(line) {
   const s = (line || "").trim();
   if (!s) return [];
   const matches = s.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g);
-  return (matches || []).map(x => x.trim()).filter(Boolean);
+  return (matches || []).map((x) => x.trim()).filter(Boolean);
 }
 
 function tokenizeContent(content) {
@@ -73,7 +123,7 @@ function tokenizeContent(content) {
     const lines = para.split(/\n/);
     lines.forEach((line, li) => {
       const sents = splitSentences(line);
-      sents.forEach(sent => tokens.push({ t: "text", v: sent }));
+      sents.forEach((sent) => tokens.push({ t: "text", v: sent }));
       if (li < lines.length - 1) tokens.push({ t: "br", v: "\n" });
     });
     if (pi < paras.length - 1) tokens.push({ t: "pbr", v: "\n\n" });
@@ -97,668 +147,383 @@ function appendToken(str, tok) {
   return str + " " + tok.v;
 }
 
-// ------------------------------
-// TTS sentence queue (lookbehind 제거)
-// ------------------------------
-function splitIntoSentencesForTTS(text) {
-  const blocks = (text || "").split(/\n{2,}/).map(v => v.trim()).filter(Boolean);
+// ------------------------------------------------------------
+// Pagination helpers
+// ------------------------------------------------------------
+function splitByChars(text, maxHeight) {
   const out = [];
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    const sents = b.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g);
-    if (sents) {
-      for (let j = 0; j < sents.length; j++) {
-        const t = sents[j].trim();
-        if (t) out.push(t);
-      }
+  let i = 0;
+  while (i < text.length) {
+    let lo = i + 40;
+    let hi = Math.min(text.length, i + 1400);
+    let best = lo;
+
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const sub = text.slice(i, mid);
+      measureText.textContent = sub;
+      if (measureText.getBoundingClientRect().height <= maxHeight) {
+        best = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+
+    if (best <= i) best = Math.min(text.length, i + 200);
+    out.push(text.slice(i, best).trim());
+    i = best;
+  }
+  return out.filter(Boolean);
+}
+
+function buildPages() {
+  const ep = NOVEL.episodes[currentEpisodeIndex];
+  if (!ep) return;
+
+  pages = [];
+
+  const stageRect = bookStage.getBoundingClientRect();
+  const styles = getComputedStyle(document.documentElement);
+  const padX = parseFloat(styles.getPropertyValue("--pagePadX")) || 18;
+  const padY = parseFloat(styles.getPropertyValue("--pagePadY")) || 18;
+
+  const shellW = Math.max(260, stageRect.width - 28);
+  const shellH = Math.max(220, stageRect.height - 84);
+  const contentW = Math.max(220, shellW - padX * 2);
+  const contentH = Math.max(180, shellH - padY * 2);
+
+  measureBox.style.width = contentW + "px";
+  measureText.style.width = contentW + "px";
+
+  const tokens = tokenizeContent(ep.content);
+  let buf = "";
+
+  for (const tok of tokens) {
+    const candidate = appendToken(buf, tok);
+    measureText.textContent = candidate;
+
+    if (measureText.getBoundingClientRect().height <= contentH) {
+      buf = candidate;
+      continue;
+    }
+
+    if (buf.trim()) {
+      pages.push(buf.trimEnd());
+      buf = "";
+    }
+
+    if (tok.t === "br" || tok.t === "pbr") continue;
+
+    const single = appendToken("", tok);
+    measureText.textContent = single;
+
+    if (measureText.getBoundingClientRect().height <= contentH) {
+      buf = single;
+    } else {
+      const chunks = splitByChars(single, contentH);
+      pages.push(...chunks.slice(0, -1));
+      buf = chunks[chunks.length - 1] || "";
     }
   }
-  return out;
+
+  if (buf.trim()) pages.push(buf.trimEnd());
 }
 
-function ttsSupported() {
-  return ("speechSynthesis" in window) && ("SpeechSynthesisUtterance" in window);
+// ------------------------------------------------------------
+// Render + progress
+// ------------------------------------------------------------
+function clamp(n, a, b) {
+  return Math.max(a, Math.min(b, n));
 }
 
-// ============================================================
-// Main
-// ============================================================
-window.addEventListener("DOMContentLoaded", init);
-
-function init() {
-  try {
-    // ---- 필수 DOM 체크 (여기서 하나라도 없으면 “목차/본문 안뜸” 확정 원인)
-    const requiredIds = [
-      "#year","#siteTitle","#siteDesc",
-      "#tocView","#readerView","#backToToc",
-      "#epTitle","#epMeta","#epContent",
-      "#prevBtn","#nextBtn",
-      "#modeScrollBtn","#modeBookBtn","#modeHint","#progressHint",
-      "#bookWrap","#bookStage","#bookEpLabel","#spreadIndicator",
-      "#pageText","#pagePrevBtn","#pageNextBtn",
-      "#pageNumberLabel","#percentLabel","#progressBarFill",
-      "#flipLayer","#sheet","#sheetFrontText","#sheetBackText",
-      "#measureBox","#measureText",
-      "#mPrev","#mNext","#mMode","#mTts","#mSpeed",
-      "#ttsBtn","#ttsStopBtn",
-      "#ttsRate","#ttsRateValue"
-    ];
-
-    for (let i = 0; i < requiredIds.length; i++) {
-      const sel = requiredIds[i];
-      if (!$(sel)) {
-        throw new Error(`HTML에 ${sel} 요소가 없습니다. (id 오타/누락 확인)`);
-      }
-    }
-
-    // ---- DOM refs
-    const yearEl = $("#year");
-    const siteTitle = $("#siteTitle");
-    const siteDesc = $("#siteDesc");
-
-    const toc = $("#tocView");
-    const reader = $("#readerView");
-    const back = $("#backToToc");
-    const epTitle = $("#epTitle");
-    const epMeta = $("#epMeta");
-    const epContent = $("#epContent");
-    const prevBtn = $("#prevBtn");
-    const nextBtn = $("#nextBtn");
-
-    const modeScrollBtn = $("#modeScrollBtn");
-    const modeBookBtn = $("#modeBookBtn");
-    const modeHint = $("#modeHint");
-    const progressHint = $("#progressHint");
-
-    const bookWrap = $("#bookWrap");
-    const bookStage = $("#bookStage");
-    const bookEpLabel = $("#bookEpLabel");
-    const spreadIndicator = $("#spreadIndicator");
-
-    const pageText = $("#pageText");
-    const pagePrevBtn = $("#pagePrevBtn");
-    const pageNextBtn = $("#pageNextBtn");
-
-    const pageNumberLabel = $("#pageNumberLabel");
-    const percentLabel = $("#percentLabel");
-    const progressBarFill = $("#progressBarFill");
-
-    const flipLayer = $("#flipLayer");
-    const sheet = $("#sheet");
-    const sheetFrontText = $("#sheetFrontText");
-    const sheetBackText = $("#sheetBackText");
-
-    const measureBox = $("#measureBox");
-    const measureText = $("#measureText");
-
-    const mobileMQ = window.matchMedia("(max-width:720px)");
-    const mPrev = $("#mPrev");
-    const mNext = $("#mNext");
-    const mMode = $("#mMode");
-    const mTts = $("#mTts");
-    const mSpeed = $("#mSpeed");
-
-    const ttsBtn = $("#ttsBtn");
-    const ttsStopBtn = $("#ttsStopBtn");
-    const ttsRateInput = $("#ttsRate");
-    const ttsRateValue = $("#ttsRateValue");
-
-    // ---- 초기 텍스트
-    yearEl.textContent = String(new Date().getFullYear());
-    siteTitle.textContent = NOVEL.title;
-    siteDesc.textContent = NOVEL.desc;
-
-    // ---- state
-    let currentEpisodeIndex = -1;
-    let mode = localStorage.getItem("readerMode") || "scroll";
-    let pages = [];
-    let pageIndex = 0;
-    let animLock = false;
-    let ttsResumeAfterFlip = false;
-
-    // ---- LS (optional chaining 제거)
-    const LS_KEY = "novel_reader_last_page_v1";
-    function loadLastPage(epId) {
-      try {
-        const raw = localStorage.getItem(LS_KEY);
-        if (!raw) return 0;
-        const obj = JSON.parse(raw);
-        if (obj && Object.prototype.hasOwnProperty.call(obj, epId)) {
-          const v = obj[epId];
-          return Number.isFinite(v) ? v : 0;
-        }
-        return 0;
-      } catch { return 0; }
-    }
-    function saveLastPage(epId, idx) {
-      try {
-        const raw = localStorage.getItem(LS_KEY);
-        const obj = raw ? JSON.parse(raw) : {};
-        obj[epId] = idx;
-        localStorage.setItem(LS_KEY, JSON.stringify(obj));
-      } catch {}
-    }
-
-    // ---- pagination helpers
-    function splitByChars(text, maxHeight) {
-      const out = [];
-      let i = 0;
-      while (i < text.length) {
-        let lo = i + 40;
-        let hi = Math.min(text.length, i + 1400);
-        let best = lo;
-
-        while (lo <= hi) {
-          const mid = Math.floor((lo + hi) / 2);
-          const sub = text.slice(i, mid);
-          measureText.textContent = sub;
-          if (measureText.getBoundingClientRect().height <= maxHeight) {
-            best = mid;
-            lo = mid + 1;
-          } else {
-            hi = mid - 1;
-          }
-        }
-
-        if (best <= i) best = Math.min(text.length, i + 200);
-        out.push(text.slice(i, best).trim());
-        i = best;
-      }
-      return out.filter(Boolean);
-    }
-
-    function buildPages() {
-      const ep = NOVEL.episodes[currentEpisodeIndex];
-      if (!ep) return;
-
-      pages = [];
-
-      const stageRect = bookStage.getBoundingClientRect();
-      const styles = getComputedStyle(document.documentElement);
-      const padX = parseFloat(styles.getPropertyValue("--pagePadX")) || 18;
-      const padY = parseFloat(styles.getPropertyValue("--pagePadY")) || 18;
-
-      const shellW = Math.max(260, stageRect.width - 28);
-      const shellH = Math.max(220, stageRect.height - 84);
-      const contentW = Math.max(220, shellW - padX * 2);
-      const contentH = Math.max(180, shellH - padY * 2);
-
-      measureBox.style.width = contentW + "px";
-      measureText.style.width = contentW + "px";
-
-      const tokens = tokenizeContent(ep.content);
-      let buf = "";
-
-      for (let k = 0; k < tokens.length; k++) {
-        const tok = tokens[k];
-        const candidate = appendToken(buf, tok);
-        measureText.textContent = candidate;
-
-        if (measureText.getBoundingClientRect().height <= contentH) {
-          buf = candidate;
-          continue;
-        }
-
-        if (buf.trim()) {
-          pages.push(buf.trimEnd());
-          buf = "";
-        }
-
-        if (tok.t === "br" || tok.t === "pbr") continue;
-
-        const single = appendToken("", tok);
-        measureText.textContent = single;
-
-        if (measureText.getBoundingClientRect().height <= contentH) {
-          buf = single;
-        } else {
-          const chunks = splitByChars(single, contentH);
-          for (let c = 0; c < chunks.length - 1; c++) pages.push(chunks[c]);
-          buf = chunks[chunks.length - 1] || "";
-        }
-      }
-
-      if (buf.trim()) pages.push(buf.trimEnd());
-    }
-
-    function updateProgressUI() {
-      const total = Math.max(1, pages.length);
-      const current = clamp(pageIndex, 0, total - 1);
-      const percent = Math.round(((current + 1) / total) * 100);
-
-      progressHint.textContent = `페이지: ${current + 1}/${total} · ${percent}%`;
-      pageNumberLabel.textContent = `p. ${current + 1} / ${total}`;
-      percentLabel.textContent = `${percent}%`;
-      progressBarFill.style.width = percent + "%";
-
-      const ep = NOVEL.episodes[currentEpisodeIndex];
-      if (ep) saveLastPage(ep.id, current);
-
-      pagePrevBtn.style.visibility = current > 0 ? "visible" : "hidden";
-      pageNextBtn.style.visibility = current < total - 1 ? "visible" : "hidden";
-    }
-
-    function renderPage(idx) {
-      if (!pages.length) {
-        pageText.textContent = "";
-        spreadIndicator.textContent = `0 / 0`;
-        progressHint.textContent = `페이지: 0/0 · 0%`;
-        pageNumberLabel.textContent = `p. 0 / 0`;
-        percentLabel.textContent = `0%`;
-        progressBarFill.style.width = `0%`;
-        return;
-      }
-      pageIndex = clamp(idx, 0, pages.length - 1);
-      pageText.textContent = pages[pageIndex] || "";
-      spreadIndicator.textContent = (pageIndex + 1) + " / " + pages.length;
-      updateProgressUI();
-    }
-
-    function isMobile() { return mobileMQ.matches; }
-
-    function setMode(nextMode) {
-      mode = nextMode;
-      localStorage.setItem("readerMode", mode);
-
-      modeScrollBtn.classList.toggle("active", mode === "scroll");
-      modeBookBtn.classList.toggle("active", mode === "book");
-
-      if (mode === "scroll") {
-        modeHint.textContent = "모드: 스크롤";
-        epContent.style.display = "block";
-        bookWrap.style.display = "none";
-        progressHint.textContent = "-";
-        mMode.textContent = "스크롤";
-      } else {
-        modeHint.textContent = "모드: 책(단면)";
-        epContent.style.display = "none";
-        bookWrap.style.display = "block";
-        mMode.textContent = "책";
-
-        buildPages();
-        const ep = NOVEL.episodes[currentEpisodeIndex];
-        const last = ep ? loadLastPage(ep.id) : 0;
-        renderPage(clamp(last, 0, Math.max(0, pages.length - 1)));
-        bookEpLabel.textContent = ep ? ep.title : "";
-      }
-    }
-
-    function autoModeByDevice() {
-      if (currentEpisodeIndex < 0) return;
-      if (isMobile()) setMode("scroll");
-      else setMode(localStorage.getItem("readerMode") || "book");
-    }
-
-    // ------------------------------
-    // TTS
-    // ------------------------------
-    const RATE_KEY = "novel_tts_rate_v1";
-    let ttsRate = parseFloat(localStorage.getItem(RATE_KEY) || "1.0");
-    if (!Number.isFinite(ttsRate)) ttsRate = 1.0;
-
-    const TTS = (function(){
-      let queue = [];
-      let active = false;
-
-      function setButtonsState(state) {
-        if (!ttsSupported()) {
-          ttsBtn.textContent = "TTS 미지원";
-          mTts.textContent = "TTS 미지원";
-          return;
-        }
-        if (state === "play") {
-          ttsBtn.textContent = "⏸️ 일시정지";
-          mTts.textContent = "⏸️ 일시정지";
-        } else if (state === "pause") {
-          ttsBtn.textContent = "▶️ 재개";
-          mTts.textContent = "▶️ 재개";
-        } else {
-          ttsBtn.textContent = "🔊 읽기";
-          mTts.textContent = "🔊 읽기";
-        }
-      }
-
-      function stop() {
-        if (!ttsSupported()) return;
-        speechSynthesis.cancel();
-        active = false;
-        queue = [];
-        setButtonsState("idle");
-      }
-
-      function isActive() {
-        if (!ttsSupported()) return false;
-        return active || speechSynthesis.speaking || speechSynthesis.paused;
-      }
-
-      function getCurrentReadableText() {
-        const ep = NOVEL.episodes[currentEpisodeIndex];
-        if (!ep) return "";
-        if (mode === "book") return pages[pageIndex] || "";
-        return ep.content || "";
-      }
-
-      function speakNext() {
-        if (!ttsSupported()) return;
-
-        if (queue.length === 0) {
-          active = false;
-          setButtonsState("idle");
-          return;
-        }
-
-        const chunk = queue.shift();
-        const utter = new SpeechSynthesisUtterance(chunk);
-        utter.lang = "ko-KR";
-        utter.rate = ttsRate;
-        utter.pitch = 1.0;
-
-        utter.onend = function(){ speakNext(); };
-        utter.onerror = function(){
-          active = false;
-          setButtonsState("idle");
-        };
-
-        speechSynthesis.speak(utter);
-      }
-
-      function start(text) {
-        if (!ttsSupported()) {
-          alert("이 브라우저는 TTS(Web Speech API)를 지원하지 않습니다.");
-          return;
-        }
-        stop();
-        queue = splitIntoSentencesForTTS(text);
-        if (queue.length === 0) return;
-        active = true;
-        setButtonsState("play");
-        speakNext();
-      }
-
-      function toggle() {
-        if (!ttsSupported()) {
-          alert("이 브라우저는 TTS(Web Speech API)를 지원하지 않습니다.");
-          return;
-        }
-
-        // speaking → pause
-        if (speechSynthesis.speaking && !speechSynthesis.paused) {
-          speechSynthesis.pause();
-          active = true;
-          setButtonsState("pause");
-          return;
-        }
-
-        // paused → resume (✅ speaking 안 붙으면 강제 재시작)
-        if (speechSynthesis.paused) {
-          speechSynthesis.resume();
-          active = true;
-          setTimeout(function(){
-            if (!speechSynthesis.speaking) start(getCurrentReadableText());
-            else setButtonsState("play");
-          }, 120);
-          return;
-        }
-
-        // active queue continuation
-        if (active && queue.length > 0) {
-          setButtonsState("play");
-          speakNext();
-          return;
-        }
-
-        // new start
-        const t = getCurrentReadableText();
-        if (!t.trim()) return;
-        start(t);
-      }
-
-      function setRate(r){ ttsRate = r; }
-
-      return { start, stop, toggle, isActive, setRate };
-    })();
-
-    function setRate(r) {
-      ttsRate = clamp(r, 0.7, 1.6);
-      localStorage.setItem(RATE_KEY, String(ttsRate));
-      ttsRateInput.value = String(ttsRate);
-      ttsRateValue.textContent = ttsRate.toFixed(2) + "x";
-      mSpeed.textContent = ttsRate.toFixed(2) + "x";
-      TTS.setRate(ttsRate);
-    }
-
-    ttsRateInput.addEventListener("input", function(){
-      setRate(parseFloat(ttsRateInput.value));
-    });
-    setRate(ttsRate);
-
-    // ------------------------------
-    // Flip animation
-    // ------------------------------
-    function flipTo(nextIdx) {
-      if (animLock) return;
-      if (nextIdx === pageIndex) return;
-      if (nextIdx < 0 || nextIdx >= pages.length) return;
-
-      const dir = nextIdx > pageIndex ? "next" : "prev";
-      animLock = true;
-
-      if (mode === "book" && TTS.isActive()) {
-        ttsResumeAfterFlip = true;
-        TTS.stop();
-      } else {
-        ttsResumeAfterFlip = false;
-      }
-
-      flipLayer.style.display = "block";
-      flipLayer.classList.add("active");
-      flipLayer.classList.remove("flipNext", "flipPrev");
-
-      if (dir === "next") {
-        sheet.style.transformOrigin = "left center";
-        sheetFrontText.textContent = pages[pageIndex] || "";
-        sheetBackText.textContent = pages[nextIdx] || "";
-        flipLayer.classList.add("flipNext");
-      } else {
-        sheet.style.transformOrigin = "right center";
-        sheetFrontText.textContent = pages[pageIndex] || "";
-        sheetBackText.textContent = pages[nextIdx] || "";
-        flipLayer.classList.add("flipPrev");
-      }
-
-      const dur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--flipDur")) || 620;
-      const midMs = Math.max(240, Math.floor(dur / 2));
-      setTimeout(function(){ renderPage(nextIdx); }, midMs);
-
-      sheet.addEventListener("animationend", function onEnd() {
-        sheet.removeEventListener("animationend", onEnd);
-        flipLayer.classList.remove("flipNext", "flipPrev", "active");
-        flipLayer.style.display = "none";
-        animLock = false;
-
-        if (ttsResumeAfterFlip && mode === "book") {
-          ttsResumeAfterFlip = false;
-          const text = (pages[pageIndex] || "");
-          if (text.trim()) TTS.start(text);
-        }
-      });
-    }
-
-    // ------------------------------
-    // TOC + episode routing
-    // ------------------------------
-    function renderToc() {
-      toc.innerHTML =
-        `<div style="font-weight:700;margin-bottom:8px;">목차</div>` +
-        NOVEL.episodes.map(function(ep){
-          return `
-            <a href="#${ep.id}">
-              ${escapeHtml(ep.title)}
-              <div class="meta">${escapeHtml(ep.date || "")}</div>
-            </a>
-          `;
-        }).join("");
-    }
-
-    function showEpisodeByHash() {
-      const id = location.hash.replace("#", "");
-      const idx = NOVEL.episodes.findIndex(function(e){ return e.id === id; });
-
-      if (idx === -1) {
-        reader.style.display = "none";
-        toc.style.display = "block";
-        return;
-      }
-
-      currentEpisodeIndex = idx;
-      const ep = NOVEL.episodes[idx];
-
-      toc.style.display = "none";
-      reader.style.display = "block";
-
-      epTitle.textContent = ep.title;
-      epMeta.textContent = ep.date ? ("업데이트: " + ep.date) : "";
-      epContent.textContent = ep.content;
-
-      prevBtn.style.visibility = idx > 0 ? "visible" : "hidden";
-      nextBtn.style.visibility = idx < NOVEL.episodes.length - 1 ? "visible" : "hidden";
-
-      prevBtn.onclick = function(e){
-        e.preventDefault();
-        location.hash = NOVEL.episodes[idx - 1].id;
-      };
-      nextBtn.onclick = function(e){
-        e.preventDefault();
-        location.hash = NOVEL.episodes[idx + 1].id;
-      };
-
-      autoModeByDevice();
-      TTS.stop();
-    }
-
-    // ------------------------------
-    // UI wiring
-    // ------------------------------
-    back.onclick = function(e){ e.preventDefault(); location.hash = ""; };
-
-    modeScrollBtn.onclick = function(e){ e.preventDefault(); setMode("scroll"); };
-    modeBookBtn.onclick = function(e){ e.preventDefault(); setMode("book"); };
-
-    pagePrevBtn.onclick = function(e){ e.preventDefault(); flipTo(pageIndex - 1); };
-    pageNextBtn.onclick = function(e){ e.preventDefault(); flipTo(pageIndex + 1); };
-
-    mPrev.onclick = function(e){
-      e.preventDefault();
-      if (mode === "book") flipTo(pageIndex - 1);
-      else window.scrollBy({ top: -window.innerHeight * 0.75, behavior: "smooth" });
-    };
-    mNext.onclick = function(e){
-      e.preventDefault();
-      if (mode === "book") flipTo(pageIndex + 1);
-      else window.scrollBy({ top: window.innerHeight * 0.75, behavior: "smooth" });
-    };
-    mMode.onclick = function(e){
-      e.preventDefault();
-      setMode(mode === "scroll" ? "book" : "scroll");
-    };
-
-    ttsBtn.onclick = function(e){ e.preventDefault(); TTS.toggle(); };
-    mTts.onclick = function(e){ e.preventDefault(); TTS.toggle(); };
-    ttsStopBtn.onclick = function(e){ e.preventDefault(); TTS.stop(); };
-
-    mSpeed.onclick = function(e){
-      e.preventDefault();
-      const v = prompt("TTS 속도 (0.70 ~ 1.60)", ttsRate.toFixed(2));
-      if (v === null) return;
-      const n = parseFloat(v);
-      if (!Number.isFinite(n)) return;
-      setRate(n);
-    };
-
-    window.addEventListener("keydown", function(e){
-      if (mode !== "book") return;
-      if (reader.style.display === "none") return;
-      if (e.key === "ArrowRight") flipTo(pageIndex + 1);
-      if (e.key === "ArrowLeft") flipTo(pageIndex - 1);
-    });
-
-    // swipe
-    let touchX = null;
-    bookStage.addEventListener("touchstart", function(e){
-      if (mode !== "book") return;
-      touchX = e.touches[0].clientX;
-    }, { passive:true });
-
-    bookStage.addEventListener("touchend", function(e){
-      if (mode !== "book") return;
-      if (touchX === null) return;
-      const endX = e.changedTouches[0].clientX;
-      const dx = endX - touchX;
-      touchX = null;
-      const threshold = 50;
-      if (dx < -threshold) flipTo(pageIndex + 1);
-      else if (dx > threshold) flipTo(pageIndex - 1);
-    }, { passive:true });
-
-    // resize reflow
-    let resizeTimer = null;
-    window.addEventListener("resize", function(){
-      if (mode !== "book") return;
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(function(){
-        const keep = pageIndex;
-        buildPages();
-        renderPage(clamp(keep, 0, Math.max(0, pages.length - 1)));
-      }, 140);
-    });
-
-    // mediaquery change (optional chaining 제거)
-    if (typeof mobileMQ.addEventListener === "function") {
-      mobileMQ.addEventListener("change", autoModeByDevice);
-    } else if (typeof mobileMQ.addListener === "function") {
-      mobileMQ.addListener(autoModeByDevice);
-    }
-
-    // ------------------------------
-    // Init run
-    // ------------------------------
-    renderToc();
-    window.addEventListener("hashchange", showEpisodeByHash);
-    showEpisodeByHash();
-
-  } catch (err) {
-    showFatal(err && err.message ? err.message : String(err), err);
+function updateProgressUI() {
+  const total = Math.max(1, pages.length);
+  const current = clamp(pageIndex, 0, total - 1);
+  const percent = Math.round(((current + 1) / total) * 100);
+
+  progressHint.textContent = `페이지: ${current + 1}/${total} · ${percent}%`;
+  pageNumberLabel.textContent = `p. ${current + 1} / ${total}`;
+  percentLabel.textContent = `${percent}%`;
+  progressBarFill.style.width = `${percent}%`;
+
+  const ep = NOVEL.episodes[currentEpisodeIndex];
+  if (ep) saveLastPage(ep.id, current);
+
+  pagePrevBtn.style.visibility = current > 0 ? "visible" : "hidden";
+  pageNextBtn.style.visibility = current < total - 1 ? "visible" : "hidden";
+}
+
+function renderPage(idx) {
+  if (!pages.length) {
+    pageText.textContent = "";
+    spreadIndicator.textContent = `0 / 0`;
+    progressHint.textContent = `페이지: 0/0 · 0%`;
+    pageNumberLabel.textContent = `p. 0 / 0`;
+    percentLabel.textContent = `0%`;
+    progressBarFill.style.width = `0%`;
+    return;
+  }
+  pageIndex = clamp(idx, 0, pages.length - 1);
+  pageText.textContent = pages[pageIndex] ?? "";
+  spreadIndicator.textContent = `${pageIndex + 1} / ${pages.length}`;
+  updateProgressUI();
+}
+
+// ------------------------------------------------------------
+// Modes + Mobile auto switching
+// ------------------------------------------------------------
+function isMobile() {
+  return mobileMQ.matches;
+}
+
+function setMode(nextMode) {
+  mode = nextMode;
+  localStorage.setItem("readerMode", mode);
+
+  modeScrollBtn.classList.toggle("active", mode === "scroll");
+  modeBookBtn.classList.toggle("active", mode === "book");
+
+  if (mode === "scroll") {
+    modeHint.textContent = "모드: 스크롤";
+    epContent.style.display = "block";
+    bookWrap.style.display = "none";
+    progressHint.textContent = "-";
+    mMode.textContent = "스크롤";
+  } else {
+    modeHint.textContent = "모드: 책(단면)";
+    epContent.style.display = "none";
+    bookWrap.style.display = "block";
+    mMode.textContent = "책";
+
+    const ep = NOVEL.episodes[currentEpisodeIndex];
+    buildPages();
+    const last = ep ? loadLastPage(ep.id) : 0;
+    renderPage(clamp(last, 0, Math.max(0, pages.length - 1)));
+    bookEpLabel.textContent = ep?.title ?? "";
   }
 }
 
-// ============================================================
+function autoModeByDevice() {
+  if (currentEpisodeIndex < 0) return;
+  if (isMobile()) {
+    setMode("scroll");
+  } else {
+    setMode(localStorage.getItem("readerMode") || "book");
+  }
+}
+
+// ------------------------------------------------------------
+// Flip animation
+// ------------------------------------------------------------
+function flipTo(nextIdx) {
+  if (animLock) return;
+  if (nextIdx === pageIndex) return;
+  if (nextIdx < 0 || nextIdx >= pages.length) return;
+
+  const dir = nextIdx > pageIndex ? "next" : "prev";
+  animLock = true;
+
+  flipLayer.style.display = "block";
+  flipLayer.classList.add("active");
+  flipLayer.classList.remove("flipNext", "flipPrev");
+
+  if (dir === "next") {
+    sheet.style.transformOrigin = "left center";
+    sheetFrontText.textContent = pages[pageIndex] ?? "";
+    sheetBackText.textContent = pages[nextIdx] ?? "";
+    flipLayer.classList.add("flipNext");
+  } else {
+    sheet.style.transformOrigin = "right center";
+    sheetFrontText.textContent = pages[pageIndex] ?? "";
+    sheetBackText.textContent = pages[nextIdx] ?? "";
+    flipLayer.classList.add("flipPrev");
+  }
+
+  const dur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--flipDur")) || 620;
+  const midMs = Math.max(240, Math.floor(dur / 2));
+  setTimeout(() => renderPage(nextIdx), midMs);
+
+  const onEnd = () => {
+    sheet.removeEventListener("animationend", onEnd);
+    flipLayer.classList.remove("flipNext", "flipPrev", "active");
+    flipLayer.style.display = "none";
+    animLock = false;
+  };
+  sheet.addEventListener("animationend", onEnd);
+}
+
+// ------------------------------------------------------------
+// TOC + episode navigation
+// ------------------------------------------------------------
+function renderToc() {
+  toc.innerHTML = `
+    <div style="font-weight:700;margin-bottom:8px;">목차</div>
+    ${NOVEL.episodes.map(ep => `
+      <a href="#${ep.id}">
+        ${ep.title}
+        <div class="meta">${ep.date ?? ""}</div>
+      </a>
+    `).join("")}
+  `;
+}
+
+function showEpisodeByHash() {
+  const id = location.hash.replace("#", "");
+  const idx = NOVEL.episodes.findIndex((e) => e.id === id);
+
+  if (idx === -1) {
+    reader.style.display = "none";
+    toc.style.display = "block";
+    return;
+  }
+
+  currentEpisodeIndex = idx;
+  const ep = NOVEL.episodes[idx];
+
+  toc.style.display = "none";
+  reader.style.display = "block";
+
+  epTitle.textContent = ep.title;
+  epMeta.textContent = ep.date ? `업데이트: ${ep.date}` : "";
+  epContent.textContent = ep.content;
+
+  prevBtn.style.visibility = idx > 0 ? "visible" : "hidden";
+  nextBtn.style.visibility = idx < NOVEL.episodes.length - 1 ? "visible" : "hidden";
+
+  prevBtn.onclick = (e) => {
+    e.preventDefault();
+    location.hash = NOVEL.episodes[idx - 1].id;
+  };
+  nextBtn.onclick = (e) => {
+    e.preventDefault();
+    location.hash = NOVEL.episodes[idx + 1].id;
+  };
+
+  autoModeByDevice();
+  armAutoHide();
+}
+
+// ------------------------------------------------------------
+// UI wiring
+// ------------------------------------------------------------
+back.onclick = (e) => {
+  e.preventDefault();
+  location.hash = "";
+};
+
+modeScrollBtn.onclick = (e) => {
+  e.preventDefault();
+  setMode("scroll");
+  armAutoHide();
+};
+
+modeBookBtn.onclick = (e) => {
+  e.preventDefault();
+  setMode("book");
+  reflowBook();
+  armAutoHide();
+};
+
+pagePrevBtn.onclick = (e) => {
+  e.preventDefault();
+  flipTo(pageIndex - 1);
+  armAutoHide();
+};
+
+pageNextBtn.onclick = (e) => {
+  e.preventDefault();
+  flipTo(pageIndex + 1);
+  armAutoHide();
+};
+
+mPrev.onclick = (e) => {
+  e.preventDefault();
+  if (mode === "book") flipTo(pageIndex - 1);
+  else window.scrollBy({ top: -window.innerHeight * 0.75, behavior: "smooth" });
+  armAutoHide();
+};
+
+mNext.onclick = (e) => {
+  e.preventDefault();
+  if (mode === "book") flipTo(pageIndex + 1);
+  else window.scrollBy({ top: window.innerHeight * 0.75, behavior: "smooth" });
+  armAutoHide();
+};
+
+mMode.onclick = (e) => {
+  e.preventDefault();
+  const next = mode === "scroll" ? "book" : "scroll";
+  setMode(next);
+  if (next === "book") reflowBook();
+  armAutoHide();
+};
+
+// keyboard
+window.addEventListener("keydown", (e) => {
+  if (mode !== "book") return;
+  if (reader.style.display === "none") return;
+  if (e.key === "ArrowRight") flipTo(pageIndex + 1);
+  if (e.key === "ArrowLeft") flipTo(pageIndex - 1);
+});
+
+// swipe
+let touchX = null;
+bookStage.addEventListener("touchstart", (e) => {
+  if (mode !== "book") return;
+  touchX = e.touches[0].clientX;
+}, { passive: true });
+
+bookStage.addEventListener("touchend", (e) => {
+  if (mode !== "book") return;
+  if (touchX === null) return;
+  const endX = e.changedTouches[0].clientX;
+  const dx = endX - touchX;
+  touchX = null;
+
+  const threshold = 50;
+  if (dx < -threshold) flipTo(pageIndex + 1);
+  else if (dx > threshold) flipTo(pageIndex - 1);
+}, { passive: true });
+
+// resize reflow (desktop)
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  if (mode !== "book") return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const keep = pageIndex;
+    buildPages();
+    renderPage(clamp(keep, 0, Math.max(0, pages.length - 1)));
+  }, 140);
+});
+
+// device change
+mobileMQ.addEventListener?.("change", () => autoModeByDevice());
+
+// ------------------------------------------------------------
 // Mobile Focus Mode (Controls auto-hide) + Book reflow fix
-// ============================================================
-
+// ------------------------------------------------------------
 let focusTimer = null;
+
 function setFocusMode(on){
   document.body.classList.toggle("readingFocus", on);
 }
 
 function armAutoHide(){
-  // 모바일에서만 자동숨김
   if (!isMobile()) return;
   clearTimeout(focusTimer);
-  setFocusMode(false); // 터치하면 다시 보이게
+  setFocusMode(false);
   focusTimer = setTimeout(()=> setFocusMode(true), 2200);
 }
 
-// 탭/스크롤/버튼 누르면 잠깐 보이고 다시 숨김
 ["click","touchstart","scroll","keydown"].forEach(evt=>{
   window.addEventListener(evt, armAutoHide, { passive:true });
 });
 
-// 리더 영역 자체를 탭하면 토글도 가능(한 번은 보여주고, 다시 탭하면 숨김)
 reader.addEventListener("click", (e)=>{
   if (!isMobile()) return;
-  // 버튼 클릭은 그냥 동작시키고, 빈 곳 탭만 토글
   const isBtn = e.target.closest(".btn");
   if (isBtn) return;
+
   const now = document.body.classList.contains("readingFocus");
   setFocusMode(!now);
   if (!now) {
@@ -767,14 +532,10 @@ reader.addEventListener("click", (e)=>{
   }
 });
 
-// ------------------------------------------------------------
-// Book reflow fix: 모바일 주소창/폰트 로딩 등으로 높이 흔들릴 때 재측정
-// ------------------------------------------------------------
 function reflowBook(){
   if (mode !== "book") return;
   if (currentEpisodeIndex < 0) return;
 
-  // 두 번 rAF로 레이아웃 안정화 후 측정
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
       const keep = pageIndex;
@@ -784,18 +545,11 @@ function reflowBook(){
   });
 }
 
-// 폰트 로딩 완료 시점에도 재측정
-if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(()=> reflowBook()).catch(()=>{});
-}
-
-// 모바일에서 화면 높이 변화(주소창) 반응
 window.addEventListener("orientationchange", ()=> setTimeout(reflowBook, 220));
 
-// 책 모드 전환 직후에도 한 번 더 재측정(잘림 방지)
-const _setMode = setMode;
-setMode = function(nextMode){
-  _setMode(nextMode);
-  if (nextMode === "book") reflowBook();
-  armAutoHide();
-};
+// ------------------------------------------------------------
+// Init
+// ------------------------------------------------------------
+renderToc();
+window.addEventListener("hashchange", showEpisodeByHash);
+showEpisodeByHash();

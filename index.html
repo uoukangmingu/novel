@@ -20,11 +20,6 @@
     <section id="readerView" class="card reader">
       <div class="readerTopRow">
         <a class="btn" href="#" id="backToToc">← 목차</a>
-
-        <div class="ttsCluster">
-          <a class="btn" href="#" id="ttsBtn">🔊 읽기</a>
-          <a class="btn" href="#" id="ttsStopBtn">⏹ 정지</a>
-        </div>
       </div>
 
       <h2 id="epTitle" class="epTitle"></h2>
@@ -38,12 +33,6 @@
         </div>
 
         <div class="right">
-          <div class="speedBox">
-            <span class="speedLabel">TTS 속도</span>
-            <input id="ttsRate" type="range" min="0.7" max="1.6" step="0.05" value="1.0" />
-            <span class="speedValue" id="ttsRateValue">1.00x</span>
-          </div>
-
           <span class="pill" id="modeHint">모드: -</span>
           <span class="pill" id="progressHint">-</span>
         </div>
@@ -106,12 +95,10 @@
         <a class="btn" href="#" id="nextBtn">다음 회차 →</a>
       </div>
 
-      <!-- 모바일 하단 고정 바 -->
+      <!-- 모바일 하단 고정 바 (TTS 제거 버전) -->
       <div class="mobileBar" id="mobileBar">
         <a class="btn" href="#" id="mPrev">←</a>
         <a class="btn" href="#" id="mMode">스크롤</a>
-        <a class="btn" href="#" id="mSpeed">1.00x</a>
-        <a class="btn" href="#" id="mTts">🔊 읽기</a>
         <a class="btn" href="#" id="mNext">→</a>
       </div>
     </section>
