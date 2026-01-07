@@ -1,0 +1,310 @@
+﻿:root{
+  --bg:#0b0c10; --card:#11131a; --text:#e8e8ea; --muted:#a7a7ad; --line:#23263a; --link:#8ab4ff;
+  --btnBg:#121522; --btnHover:#171b2b;
+
+  --radius:14px; --shadow: 0 14px 36px rgba(0,0,0,.45);
+
+  --readerFont:17px; --readerLine:2.0;
+
+  /* book */
+  --stageH: min(72vh, 700px);
+  --pagePadX: 18px;
+  --pagePadY: 18px;
+
+  /* flip */
+  --flipDur: 620ms;
+  --flipEase: cubic-bezier(.15,.85,.12,1);
+
+  /* curvature intensity */
+  --curlShade: .55;
+  --edgeShade: .35;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif;
+  background:var(--bg);color:var(--text);
+}
+.wrap{max-width:780px;margin:0 auto;padding:24px 16px 110px;}
+header{margin:10px 0 22px;}
+h1{font-size:28px;margin:0 0 6px;}
+p{line-height:1.9;font-size:16px;color:var(--muted);margin:0;}
+a{color:var(--link);text-decoration:none;}
+a:hover{text-decoration:underline;}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:16px;
+  margin:14px 0;
+}
+.toc a{display:block;padding:10px 12px;border-radius:10px;}
+.toc a:hover{background:#151826;}
+
+.meta{font-size:13px;color:var(--muted);margin-top:6px}
+.tip{margin-top:10px}
+
+.reader{display:none}
+.epTitle{margin:14px 0 6px;font-size:22px}
+
+.readerTopRow{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+.ttsCluster{display:flex; gap:10px; align-items:center;}
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:10px 12px;border-radius:12px;border:1px solid var(--line);
+  background:var(--btnBg);color:var(--text); gap:8px;
+  user-select:none;
+}
+.btn:hover{background:var(--btnHover);text-decoration:none}
+.btn.active{outline:2px solid rgba(138,180,255,.35); border-color: rgba(138,180,255,.55);}
+
+.toolbar{
+  display:flex; flex-wrap:wrap;
+  gap:10px; align-items:center; justify-content:space-between;
+  margin-top:12px;
+}
+.toolbar .left, .toolbar .right{
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+}
+.pill{
+  font-size:12px; color:var(--muted);
+  border:1px solid var(--line);
+  padding:8px 10px; border-radius:999px;
+  background:#0f1119;
+  white-space:nowrap;
+}
+
+/* ✅ TTS Speed UI */
+.speedBox{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 10px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:#0f1119;
+}
+.speedLabel{font-size:12px; color:var(--muted);}
+.speedValue{font-size:12px; color:var(--muted); min-width:54px; text-align:right;}
+.speedBox input[type="range"]{width:140px;}
+
+.scrollContent{
+  margin-top:14px;
+  line-height:var(--readerLine);
+  font-size:var(--readerFont);
+  color:var(--text);
+  white-space:pre-wrap;
+}
+
+footer{margin-top:30px;color:var(--muted);font-size:13px}
+
+/* -------- Single-page Book -------- */
+.bookWrap{ margin-top:14px; display:none; }
+.bookStage{
+  position:relative;
+  height: var(--stageH);
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:
+    radial-gradient(1200px 300px at 50% -30%, rgba(255,255,255,.06), rgba(255,255,255,0)),
+    #0f1119;
+  box-shadow: var(--shadow);
+  overflow:hidden;
+  perspective: 1600px;
+  touch-action: pan-y;
+}
+.bookTop{
+  position:absolute; left:14px; right:14px; top:12px;
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  font-size:12px; color:var(--muted);
+  z-index: 5;
+  pointer-events:none;
+}
+.bookBottom{
+  position:absolute; left:14px; right:14px; bottom:12px;
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  font-size:12px; color:var(--muted);
+  z-index: 5;
+  pointer-events:none;
+}
+.progressBar{
+  position:absolute; left:0; right:0; bottom:0;
+  height:3px;
+  background: rgba(255,255,255,.06);
+  z-index: 4;
+}
+.progressBar > div{
+  height:100%;
+  width:0%;
+  background: rgba(138,180,255,.65);
+  transition: width 220ms ease;
+}
+
+.pageShell{
+  position:absolute;
+  left:14px; right:14px;
+  top:42px; bottom:42px;
+  border-radius:16px;
+  background:#0d0f16;
+  border:1px solid rgba(255,255,255,.08);
+  overflow:hidden;
+}
+.pageInner{
+  position:absolute; inset:0;
+  padding: var(--pagePadY) var(--pagePadX);
+  overflow:hidden;
+}
+.pageText{
+  height:100%;
+  font-size:var(--readerFont);
+  line-height:var(--readerLine);
+  white-space:pre-wrap;
+  color:var(--text);
+}
+
+.pageShell:before{
+  content:"";
+  position:absolute; inset:0;
+  background:
+    radial-gradient(800px 380px at 20% 0%, rgba(255,255,255,.04), rgba(255,255,255,0) 60%),
+    radial-gradient(700px 320px at 80% 110%, rgba(0,0,0,.35), rgba(0,0,0,0) 55%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02) 1px, rgba(255,255,255,0) 2px, rgba(255,255,255,0) 4px);
+  opacity:.28;
+  pointer-events:none;
+  mix-blend-mode: screen;
+}
+
+/* Flip layer */
+.flipLayer{
+  position:absolute;
+  left:14px; right:14px;
+  top:42px; bottom:42px;
+  z-index: 20;
+  display:none;
+  pointer-events:none;
+}
+.sheet{
+  position:absolute; inset:0;
+  transform-style: preserve-3d;
+  transform-origin: left center;
+  filter: drop-shadow(0 18px 26px rgba(0,0,0,.55));
+}
+.sheetFace{
+  position:absolute; inset:0;
+  backface-visibility:hidden;
+  border-radius:16px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.08);
+  background:#0d0f16;
+}
+.sheetBack{ transform: rotateY(180deg); }
+
+.curlOverlay{
+  position:absolute; inset:0;
+  pointer-events:none;
+  border-radius:16px;
+  overflow:hidden;
+}
+.curlOverlay:before{
+  content:"";
+  position:absolute; inset:0;
+  background:
+    linear-gradient(90deg,
+      rgba(0,0,0,0) 0%,
+      rgba(0,0,0,var(--edgeShade)) 78%,
+      rgba(0,0,0,.55) 100%),
+    radial-gradient(120% 90% at 0% 50%,
+      rgba(255,255,255,.10) 0%,
+      rgba(255,255,255,0) 35%),
+    radial-gradient(120% 90% at 100% 50%,
+      rgba(0,0,0,var(--curlShade)) 0%,
+      rgba(0,0,0,0) 48%);
+  mix-blend-mode: multiply;
+  opacity:.95;
+}
+.dogEar{
+  position:absolute;
+  width:110px; height:110px;
+  right:-18px; top:-18px;
+  transform: rotate(8deg);
+  background: radial-gradient(closest-side, rgba(255,255,255,.14), rgba(255,255,255,0) 70%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  opacity:.55;
+  filter: drop-shadow(-10px 10px 14px rgba(0,0,0,.45));
+}
+.dogEar:after{
+  content:"";
+  position:absolute; inset:0;
+  background: linear-gradient(225deg, rgba(0,0,0,.55), rgba(0,0,0,0) 60%);
+  opacity:.6;
+}
+.stageShadow{
+  position:absolute; inset:0;
+  pointer-events:none;
+  border-radius:16px;
+  background: radial-gradient(100% 90% at 50% 50%, rgba(0,0,0,.25), rgba(0,0,0,0) 60%);
+  opacity:0;
+  transition: opacity 160ms ease;
+}
+.flipLayer.active .stageShadow{ opacity:1; }
+
+.flipNext .sheet{ animation: flipNext var(--flipDur) cubic-bezier(.15,.85,.12,1) forwards; }
+.flipPrev .sheet{ animation: flipPrev var(--flipDur) cubic-bezier(.15,.85,.12,1) forwards; }
+
+@keyframes flipNext{
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(-180deg); }
+}
+@keyframes flipPrev{
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(180deg); }
+}
+
+.bookNav{
+  display:flex; justify-content:space-between; gap:10px;
+  margin-top:12px;
+}
+
+.episodeNav{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  margin-top:18px;
+}
+
+/* offscreen measure */
+.measureBox{ position:absolute; left:-99999px; top:-99999px; width:320px; pointer-events:none; opacity:0; }
+.measureText{ font-size:var(--readerFont); line-height:var(--readerLine); white-space:pre-wrap; }
+
+/* ------- Mobile auto UI ------- */
+.mobileBar{
+  position:fixed;
+  left:12px; right:12px; bottom:12px;
+  display:none;
+  gap:10px;
+  z-index:999;
+}
+.mobileBar .btn{
+  flex:1;
+  padding:14px 12px;
+  border-radius:16px;
+  justify-content:center;
+}
+@media (max-width:720px){
+  .wrap{padding-bottom:160px;}
+  .toolbar{display:none;}
+  .bookNav{display:none;}
+  .mobileBar{display:flex;}
+  .bookStage{height:min(66vh, 560px);}
+  h1{font-size:24px}
+  :root{ --pagePadX: 16px; --pagePadY: 16px; }
+  .dogEar{ width:92px; height:92px; }
+}
