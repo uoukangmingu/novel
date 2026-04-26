@@ -349,3 +349,42 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}.ca
   .stripCurlLayer{border-radius:15px;}
   .stripCurlPiece{box-shadow: inset -1px 0 rgba(255,255,255,.04), inset 1px 0 rgba(0,0,0,.18), 0 10px 20px rgba(0,0,0,.22);}
 }
+
+
+/* ============================================================
+   v6: book-mode indentation + manuscript-like reading typography
+   ============================================================ */
+:root{
+  --readerFont:16px;
+  --readerLine:2.38;
+  --stageH:min(86vh, 790px);
+  --pagePadX:60px;
+  --pagePadY:22px;
+}
+.bookStage{
+  width:min(560px, 100%);
+  margin-left:auto;
+  margin-right:auto;
+}
+.pageText,.measureText{
+  font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,-apple-system,sans-serif;
+  font-weight:600;
+  letter-spacing:-.012em;
+  white-space:pre-wrap;
+  word-break:keep-all;
+  overflow-wrap:break-word;
+}
+.scrollContent{
+  font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,-apple-system,sans-serif;
+  font-weight:500;
+  line-height:var(--readerLine);
+}
+@media (max-width:720px){
+  :root{
+    --readerFont:15px;
+    --readerLine:2.15;
+    --pagePadX:20px;
+    --pagePadY:18px;
+  }
+  .bookStage{width:100%;}
+}

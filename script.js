@@ -331,32 +331,51 @@ function splitByChars(text, maxHeight) {
   return out.filter(Boolean);
 }
 
+function getBookPageMetrics() {
+  // 책 모드의 실제 DOM 크기를 기준으로 페이지를 계산합니다.
+  // 이전 방식은 bookStage 높이에서 대략값을 빼서 계산했기 때문에,
+  // 실제 .pageShell/.pageInner 폭·높이와 몇 px씩 어긋나 마지막 줄이 잘릴 수 있었습니다.
+  const inner = pageShell.querySelector(".pageInner");
+  const shellRect = pageShell.getBoundingClientRect();
+  const innerRect = inner?.getBoundingClientRect?.() ?? shellRect;
+  const innerStyle = inner ? getComputedStyle(inner) : null;
+
+  const padLeft = parseFloat(innerStyle?.paddingLeft) || 0;
+  const padRight = parseFloat(innerStyle?.paddingRight) || 0;
+  const padTop = parseFloat(innerStyle?.paddingTop) || 0;
+  const padBottom = parseFloat(innerStyle?.paddingBottom) || 0;
+
+  // border/sub-pixel rounding 보정용으로 2px를 더 빼 실제 표시 영역보다 절대 크게 잡히지 않게 합니다.
+  const contentW = Math.max(180, Math.floor(innerRect.width - padLeft - padRight - 2));
+  const contentH = Math.max(120, Math.floor(innerRect.height - padTop - padBottom - 2));
+
+  measureBox.style.width = `${contentW}px`;
+  measureText.style.width = `${contentW}px`;
+
+  const measureStyle = getComputedStyle(measureText);
+  const fontPx = parseFloat(measureStyle.fontSize) || readerPrefs.font || 16;
+  const lineHeightPx = parseFloat(measureStyle.lineHeight) || fontPx * (readerPrefs.line || 2.2);
+
+  // 마지막 줄 descender/폰트 렌더링/sub-pixel 차이를 흡수하기 위해 한 줄 이상을 비워둡니다.
+  // 페이지 수는 조금 늘어나지만, 책 모드에서 글자가 하단에 걸려 잘리는 문제를 막는 쪽을 우선합니다.
+  const bottomSafe = Math.max(34, Math.ceil(lineHeightPx * 1.35));
+  const usableContentH = Math.max(90, contentH - bottomSafe);
+
+  return { contentW, contentH, usableContentH, bottomSafe, lineHeightPx };
+}
+
+function fitsMeasuredHeight(maxHeight) {
+  // getBoundingClientRect는 소수점 렌더링 오차가 있으므로 1px 여유를 둡니다.
+  return measureText.getBoundingClientRect().height <= maxHeight - 1;
+}
+
 function buildPages() {
   const ep = NOVEL.episodes[currentEpisodeIndex];
   if (!ep) return;
 
   pages = [];
 
-  const stageRect = bookStage.getBoundingClientRect();
-  const styles = getComputedStyle(document.documentElement);
-  const padX = parseFloat(styles.getPropertyValue("--pagePadX")) || 18;
-  const padY = parseFloat(styles.getPropertyValue("--pagePadY")) || 18;
-
-  const shellW = Math.max(260, stageRect.width - 28);
-  const shellH = Math.max(220, stageRect.height - 84);
-  const contentW = Math.max(220, shellW - padX * 2);
-  const contentH = Math.max(180, shellH - padY * 2);
-
-  measureBox.style.width = contentW + "px";
-  measureText.style.width = contentW + "px";
-
-  // 실제 페이지는 overflow:hidden이라 측정값이 딱 맞으면 마지막 줄 하단이 잘릴 수 있습니다.
-  // 한 줄의 약 70%를 안전 여백으로 빼고 페이지를 나눠, 책으로 보기 하단 글자 잘림을 방지합니다.
-  const measureStyle = getComputedStyle(measureText);
-  const fontPx = parseFloat(measureStyle.fontSize) || readerPrefs.font || 16;
-  const lineHeightPx = parseFloat(measureStyle.lineHeight) || fontPx * (readerPrefs.line || 2.2);
-  const bottomSafe = Math.max(16, Math.ceil(lineHeightPx * 0.7));
-  const usableContentH = Math.max(120, contentH - bottomSafe);
+  const { usableContentH } = getBookPageMetrics();
 
   const tokens = tokenizeContent(ep.content);
   let buf = "";
@@ -365,7 +384,7 @@ function buildPages() {
     const candidate = appendToken(buf, tok);
     measureText.textContent = candidate;
 
-    if (measureText.getBoundingClientRect().height <= usableContentH) {
+    if (fitsMeasuredHeight(usableContentH)) {
       buf = candidate;
       continue;
     }
@@ -380,7 +399,7 @@ function buildPages() {
     const single = appendToken("", tok);
     measureText.textContent = single;
 
-    if (measureText.getBoundingClientRect().height <= usableContentH) {
+    if (fitsMeasuredHeight(usableContentH)) {
       buf = single;
     } else {
       const chunks = splitByChars(single, usableContentH);
@@ -1471,5 +1490,6 @@ window.__readerDebug = function () {
     hasStripLayer: Boolean(flipLayer.querySelector(".stripCurlLayer")),
     flipLayerClass: flipLayer.className,
     pageTextLength: pageText.textContent.length,
+    pageMetrics: typeof getBookPageMetrics === "function" ? getBookPageMetrics() : null,
   };
 };
